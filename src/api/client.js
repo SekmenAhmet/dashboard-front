@@ -36,8 +36,4 @@ export async function getTopCities(metric, topN = 10) {
   return fetchJSON(`/api/cities/top/${metric}?top_n=${topN}`);
 }
 
-export async function getFilters() {
-  return fetchJSON("/api/filters");
-}
-
 export const apiBase = API_BASE;

@@ -9,13 +9,13 @@ export default {
         graphite: "#1f1f22",
         smoke: "#2c2c30",
         silver: "#d1d5db",
-        accent: "#f5f5f5"
+        accent: "#f5f5f5",
       },
       fontFamily: {
         display: ['"Space Grotesk"', "Inter", "system-ui", "sans-serif"],
-        body: ['"Inter"', "system-ui", "sans-serif"]
-      }
-    }
+        body: ['"Inter"', "system-ui", "sans-serif"],
+      },
+    },
   },
-  plugins: []
+  plugins: [],
 };

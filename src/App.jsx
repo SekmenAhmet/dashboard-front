@@ -1,12 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  getCitiesByCountry,
-  getCorrelations,
-  getGeographic,
-  getOverview,
-  getTopCities,
-  apiBase,
-} from "./api/client";
+import { getCitiesByCountry, getCorrelations, getGeographic, getOverview, getTopCities, apiBase } from "./api/client";
 import StatCard from "./components/StatCard";
 import PlotCard, { StyledPlot } from "./components/PlotCard";
 import Badge from "./components/Badge";
@@ -101,7 +94,6 @@ export default function App() {
       lat: geo.latitude,
       text: geo.cities.map((city, idx) => `${city} · ${geo.countries[idx]}`),
       happiness: geo.happiness_score,
-      income: geo.avg_income,
     };
   }, [geo]);
 
