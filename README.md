@@ -2,6 +2,9 @@
 
 Frontend React + Vite + Tailwind pour le City Lifestyle Dashboard. Palette noire/gris/blanc, visualisations Plotly.
 
+# Lien présentation
+[https://youtu.be/0cCQPiV7Mos](https://youtu.be/0cCQPiV7Mos)
+
 ## Prérequis
 - Node.js 18+
 
