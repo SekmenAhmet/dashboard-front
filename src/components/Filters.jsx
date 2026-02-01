@@ -10,7 +10,6 @@ export default function Filters({ showFilters, filters, setFilters, dataFilters,
   return (
     <div className="mb-6 border-b border-neutral-800 pb-4">
       <div className="flex flex-wrap items-end gap-6">
-        {/* Continents */}
         <div>
           <label className="block text-xs text-neutral-500 mb-2">Continent</label>
           <div className="flex flex-wrap gap-1.5">
@@ -33,7 +32,6 @@ export default function Filters({ showFilters, filters, setFilters, dataFilters,
           </div>
         </div>
 
-        {/* Bonheur */}
         <div>
           <label className="block text-xs text-neutral-500 mb-2">Bonheur</label>
           <div className="flex items-center gap-1.5">
@@ -61,7 +59,6 @@ export default function Filters({ showFilters, filters, setFilters, dataFilters,
           </div>
         </div>
 
-        {/* Revenu */}
         <div>
           <label className="block text-xs text-neutral-500 mb-2">Revenu (€)</label>
           <div className="flex items-center gap-1.5">
@@ -87,7 +84,6 @@ export default function Filters({ showFilters, filters, setFilters, dataFilters,
           </div>
         </div>
 
-        {/* Résultat + Reset */}
         <div className="flex items-center gap-4 ml-auto">
           <span className="text-xs text-neutral-500">
             {filteredStats?.count || 0} villes

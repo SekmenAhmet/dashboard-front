@@ -93,25 +93,8 @@ export function useDashboard() {
         income: filteredGeo.avg_income[i],
       }))
       .sort((a, b) => b.happiness - a.happiness)
-      .slice(10); // Note: Original code was slice(0, 10). Wait, slice(10) gives everything AFTER index 10. The original was slice(0, 10) for TOP 10.
-  }, [filteredGeo]);
-
-  // CORRECTION: The original code used .slice(0, 10). I must ensure I don't introduce a bug.
-  // I will fix the slice in the next write, I'll rewrite this part to be sure.
-  
-  const topCitiesFixed = useMemo(() => {
-    if (!filteredGeo) return [];
-    return filteredGeo.cities
-      .map((city, i) => ({
-        city,
-        country: filteredGeo.countries[i],
-        happiness: filteredGeo.happiness_score[i],
-        income: filteredGeo.avg_income[i],
-      }))
-      .sort((a, b) => b.happiness - a.happiness)
       .slice(0, 10);
   }, [filteredGeo]);
-
 
   const continentStats = useMemo(() => {
     if (!filteredGeo) return [];
@@ -164,7 +147,7 @@ export function useDashboard() {
     setFilters,
     filteredGeo,
     filteredStats,
-    topCities: topCitiesFixed,
+    topCities,
     continentStats,
     rentEffort,
     resetFilters,
