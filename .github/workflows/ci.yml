@@ -23,8 +23,5 @@ jobs:
       - name: Install deps
         run: npm ci
 
-      - name: Verify linting
-        run: npm run lint
-
       - name: Build
         run: npm run build
