@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+const API_BASE = "http://localhost:5000";
 
 async function fetchJSON(path, options = {}) {
   const url = `${API_BASE}${path}`;
@@ -30,6 +30,10 @@ export async function getCorrelations() {
 
 export async function getCitiesByCountry() {
   return fetchJSON("/api/cities/by-country");
+}
+
+export async function getFilters() {
+  return fetchJSON("/api/filters");
 }
 
 export async function getTopCities(metric, topN = 10) {

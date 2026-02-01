@@ -4,16 +4,12 @@ export default {
   theme: {
     extend: {
       colors: {
-        ink: "#0a0a0b",
-        charcoal: "#111113",
-        graphite: "#1f1f22",
-        smoke: "#2c2c30",
-        silver: "#d1d5db",
-        accent: "#f5f5f5",
+        neutral: {
+          950: "#0a0a0a",
+        },
       },
       fontFamily: {
-        display: ['"Space Grotesk"', "Inter", "system-ui", "sans-serif"],
-        body: ['"Inter"', "system-ui", "sans-serif"],
+        sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],
       },
     },
   },

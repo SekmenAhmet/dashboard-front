@@ -1,482 +1,736 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { getCitiesByCountry, getCorrelations, getGeographic, getOverview, getTopCities, apiBase } from "./api/client";
-import StatCard from "./components/StatCard";
-import PlotCard, { StyledPlot } from "./components/PlotCard";
-import Badge from "./components/Badge";
-import "./index.css";
+import { useEffect, useMemo, useState } from "react";
+import Plot from "react-plotly.js";
+import { getFilters, getGeographic, getOverview, getCorrelations, getCitiesByCountry } from "./api/client";
 
-const metrics = [
-  { key: "happiness_score", label: "Bonheur" },
-  { key: "avg_income", label: "Revenu" },
-  { key: "internet_penetration", label: "Internet" },
-  { key: "public_transport_score", label: "Transports" },
-  { key: "green_space_ratio", label: "Espaces verts" },
-  { key: "air_quality_index", label: "Qualité de l'air" },
+const CHART_COLORS = {
+  primary: "#3b82f6",
+  secondary: "#8b5cf6",
+  success: "#10b981",
+  warning: "#f59e0b",
+  danger: "#ef4444",
+  neutral: "#6b7280",
+};
+
+const CONTINENT_COLORS = {
+  Europe: "#3b82f6",
+  Asia: "#f59e0b",
+  "North America": "#10b981",
+  "South America": "#8b5cf6",
+  Africa: "#ef4444",
+  Oceania: "#06b6d4",
+};
+
+const TABS = [
+  { id: "overview", label: "Vue d'ensemble" },
+  { id: "distributions", label: "Distributions" },
+  { id: "comparisons", label: "Comparaisons" },
+  { id: "correlations", label: "Corrélations" },
+  { id: "geography", label: "Géographie" },
 ];
 
-function Header({ totalCities }) {
+function StatCard({ label, value, unit, color = "blue" }) {
+  const colors = {
+    blue: "border-blue-500/30 bg-blue-500/5",
+    green: "border-emerald-500/30 bg-emerald-500/5",
+    purple: "border-purple-500/30 bg-purple-500/5",
+    orange: "border-orange-500/30 bg-orange-500/5",
+  };
   return (
-    <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-      <div>
-        <p className="text-sm text-silver/60 uppercase tracking-[0.14em]">City Lifestyle Dashboard</p>
-        <h1 className="text-3xl md:text-4xl font-semibold mt-2 text-accent">Qualité de vie urbaine</h1>
-        <p className="text-silver/70 mt-2">
-          Visualisation des indicateurs clés : bonheur, revenu, mobilité, environnement et connectivité.
-        </p>
+    <div className={`rounded-xl border p-4 ${colors[color]}`}>
+      <p className="text-xs text-neutral-400 uppercase tracking-wide mb-1">{label}</p>
+      <p className="text-2xl font-semibold text-white">
+        {value}
+        {unit && <span className="text-sm text-neutral-400 ml-1">{unit}</span>}
+      </p>
+    </div>
+  );
+}
+
+function ChartCard({ title, subtitle, children, className = "" }) {
+  return (
+    <div className={`bg-neutral-900/50 border border-neutral-800 rounded-xl p-4 ${className}`}>
+      <div className="mb-3">
+        <h3 className="text-sm font-medium text-neutral-300">{title}</h3>
+        {subtitle && <p className="text-xs text-neutral-500 mt-0.5">{subtitle}</p>}
       </div>
-      <div className="flex flex-wrap gap-2">
-        <Badge>API: {apiBase}</Badge>
-        <Badge tone="accent">Villes : {totalCities ?? "..."}</Badge>
-      </div>
-    </header>
+      {children}
+    </div>
+  );
+}
+
+function BasePlot({ data, layout, height = 300 }) {
+  return (
+    <Plot
+      data={data}
+      layout={{
+        paper_bgcolor: "transparent",
+        plot_bgcolor: "transparent",
+        font: { color: "#a3a3a3", size: 11, family: "Inter, system-ui" },
+        margin: { l: 50, r: 20, t: 20, b: 40 },
+        height,
+        xaxis: { gridcolor: "#262626", zerolinecolor: "#404040" },
+        yaxis: { gridcolor: "#262626", zerolinecolor: "#404040" },
+        ...layout,
+      }}
+      config={{ displayModeBar: false, responsive: true }}
+      style={{ width: "100%", height }}
+      useResizeHandler
+    />
   );
 }
 
 export default function App() {
-  const [overview, setOverview] = useState(null);
-  const [geo, setGeo] = useState(null);
-  const [correlations, setCorrelations] = useState(null);
-  const [countryStats, setCountryStats] = useState(null);
-  const [top, setTop] = useState(null);
-  const [currentTab, setCurrentTab] = useState("overview");
-  const [metric, setMetric] = useState("happiness_score");
-  const [topN, setTopN] = useState(8);
+  const [data, setData] = useState({
+    overview: null,
+    geo: null,
+    filters: null,
+    correlations: null,
+    byCountry: null,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState("overview");
+  const [showFilters, setShowFilters] = useState(true);
+
+  const [filters, setFilters] = useState({
+    continents: [],
+    happiness: { min: "", max: "" },
+    income: { min: "", max: "" },
+  });
 
   useEffect(() => {
-    async function bootstrap() {
+    async function load() {
       try {
-        setLoading(true);
-        const [overviewData, geoData, corrData, countryData] = await Promise.all([
+        const [overview, geo, filtersData, correlations, byCountry] = await Promise.all([
           getOverview(),
           getGeographic(),
+          getFilters(),
           getCorrelations(),
           getCitiesByCountry(),
         ]);
-        setOverview(overviewData);
-        setGeo(geoData);
-        setCorrelations(corrData);
-        setCountryStats(countryData);
-      } catch (err) {
-        setError(err.message);
+        setData({ overview, geo, filters: filtersData, correlations, byCountry });
+      } catch (e) {
+        setError(e.message);
       } finally {
         setLoading(false);
       }
     }
-    bootstrap();
+    load();
   }, []);
 
-  useEffect(() => {
-    async function fetchTop() {
-      try {
-        const topData = await getTopCities(metric, topN);
-        setTop(topData);
-      } catch (err) {
-        setError(err.message);
-      }
-    }
-    fetchTop();
-  }, [metric, topN]);
+  const filteredGeo = useMemo(() => {
+    if (!data.geo) return null;
 
-  const histogramData = useMemo(() => {
-    if (!geo) return null;
-    return {
-      incomes: geo.avg_income,
-      happiness: geo.happiness_score,
-    };
-  }, [geo]);
+    const indices = data.geo.cities
+      .map((_, i) => {
+        const country = data.geo.countries[i];
+        const happiness = data.geo.happiness_score[i];
+        const income = data.geo.avg_income[i];
 
-  const mapData = useMemo(() => {
-    if (!geo) return null;
-    return {
-      lon: geo.longitude,
-      lat: geo.latitude,
-      text: geo.cities.map((city, idx) => `${city} · ${geo.countries[idx]}`),
-      happiness: geo.happiness_score,
-    };
-  }, [geo]);
+        if (filters.continents.length > 0 && !filters.continents.includes(country)) return -1;
+        if (filters.happiness.min && happiness < Number(filters.happiness.min)) return -1;
+        if (filters.happiness.max && happiness > Number(filters.happiness.max)) return -1;
+        if (filters.income.min && income < Number(filters.income.min)) return -1;
+        if (filters.income.max && income > Number(filters.income.max)) return -1;
+        return i;
+      })
+      .filter((i) => i >= 0);
 
-  const scatterData = useMemo(() => {
-    if (!geo) return null;
-    return {
-      x: geo.avg_income,
-      y: geo.happiness_score,
-      transport: geo.public_transport_score,
-      text: geo.cities.map((city, idx) => `${city} · ${geo.countries[idx]}`),
-    };
-  }, [geo]);
+    const pick = (arr) => indices.map((i) => arr[i]);
 
-  const topData = useMemo(() => {
-    if (!top) return null;
     return {
-      x: top.metric_values,
-      y: top.cities.map((c, idx) => `${c} · ${top.countries[idx]}`),
+      cities: pick(data.geo.cities),
+      countries: pick(data.geo.countries),
+      avg_income: pick(data.geo.avg_income),
+      happiness_score: pick(data.geo.happiness_score),
+      air_quality_index: pick(data.geo.air_quality_index),
+      public_transport_score: pick(data.geo.public_transport_score),
+      green_space_ratio: pick(data.geo.green_space_ratio),
+      internet_penetration: pick(data.geo.internet_penetration),
+      population_density: pick(data.geo.population_density),
+      avg_rent: pick(data.geo.avg_rent),
+      latitude: pick(data.geo.latitude),
+      longitude: pick(data.geo.longitude),
     };
-  }, [top]);
+  }, [data.geo, filters]);
 
-  const heatmapData = useMemo(() => {
-    if (!correlations) return null;
-    return {
-      z: correlations.correlation_matrix,
-      x: correlations.columns,
-      y: correlations.columns,
-    };
-  }, [correlations]);
+  const filteredStats = useMemo(() => {
+    if (!filteredGeo || filteredGeo.cities.length === 0) return null;
+    const count = filteredGeo.cities.length;
+    const avgHappiness = filteredGeo.happiness_score.reduce((a, b) => a + b, 0) / count;
+    const avgIncome = filteredGeo.avg_income.reduce((a, b) => a + b, 0) / count;
+    const avgAir = filteredGeo.air_quality_index.reduce((a, b) => a + b, 0) / count;
+    return { count, avgHappiness, avgIncome, avgAir };
+  }, [filteredGeo]);
 
-  const countryBreakdown = useMemo(() => {
-    if (!countryStats) return null;
-    return {
-      countries: countryStats.countries,
-      cityCount: countryStats.city_count,
-      happiness: countryStats.avg_happiness,
-    };
-  }, [countryStats]);
+  const topCities = useMemo(() => {
+    if (!filteredGeo) return [];
+    return filteredGeo.cities
+      .map((city, i) => ({
+        city,
+        country: filteredGeo.countries[i],
+        happiness: filteredGeo.happiness_score[i],
+        income: filteredGeo.avg_income[i],
+      }))
+      .sort((a, b) => b.happiness - a.happiness)
+      .slice(0, 10);
+  }, [filteredGeo]);
+
+  const continentStats = useMemo(() => {
+    if (!filteredGeo) return [];
+    const stats = {};
+    filteredGeo.countries.forEach((country, i) => {
+      if (!stats[country]) stats[country] = { count: 0, happiness: [], income: [] };
+      stats[country].count++;
+      stats[country].happiness.push(filteredGeo.happiness_score[i]);
+      stats[country].income.push(filteredGeo.avg_income[i]);
+    });
+    return Object.entries(stats).map(([continent, s]) => ({
+      continent,
+      cities: s.count,
+      avgHappiness: s.happiness.reduce((a, b) => a + b, 0) / s.happiness.length,
+      avgIncome: s.income.reduce((a, b) => a + b, 0) / s.income.length,
+    }));
+  }, [filteredGeo]);
+
+  const rentEffort = useMemo(() => {
+    if (!filteredGeo) return [];
+    return filteredGeo.avg_income.map((income, i) => {
+      const rent = filteredGeo.avg_rent[i];
+      if (!income || income === 0) return 0;
+      return (rent / income) * 100;
+    });
+  }, [filteredGeo]);
+
+  const resetFilters = () => {
+    setFilters({
+      continents: [],
+      happiness: { min: "", max: "" },
+      income: { min: "", max: "" },
+    });
+  };
+
+  const toggleContinent = (continent) => {
+    setFilters((prev) => ({
+      ...prev,
+      continents: prev.continents.includes(continent)
+        ? prev.continents.filter((c) => c !== continent)
+        : [...prev.continents, continent],
+    }));
+  };
+
+  const hasActiveFilters = filters.continents.length > 0 ||
+    filters.happiness.min || filters.happiness.max ||
+    filters.income.min || filters.income.max;
 
   if (error) {
     return (
-      <div className="min-h-screen bg-ink text-accent flex items-center justify-center">
-        <div className="card max-w-xl text-center space-y-3">
-          <h2 className="text-xl font-semibold">Erreur</h2>
-          <p className="text-silver/70">{error}</p>
-          <p className="muted">Vérifiez que l'API backend est lancée sur {apiBase}</p>
+      <div className="min-h-screen bg-neutral-950 flex items-center justify-center text-white">
+        <div className="text-center">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-500/10 flex items-center justify-center">
+            <span className="text-2xl">!</span>
+          </div>
+          <p className="text-red-400 mb-2">Erreur de connexion</p>
+          <p className="text-neutral-500 text-sm">{error}</p>
         </div>
       </div>
     );
   }
 
-  return (
-    <main className="min-h-screen max-w-6xl mx-auto px-4 py-6">
-      <Header totalCities={overview?.total_cities} />
-
-      <div className="flex flex-wrap gap-2 mb-6">
-        {[
-          { key: "overview", label: "Vue d'ensemble" },
-          { key: "comparisons", label: "Comparaisons & corrélations" },
-          { key: "geography", label: "Géographie & pays" },
-        ].map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setCurrentTab(tab.key)}
-            className={`px-4 py-2 rounded-full text-sm border ${
-              currentTab === tab.key
-                ? "bg-white/10 border-white/20 text-accent"
-                : "bg-smoke border-white/10 text-silver hover:border-white/20"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-neutral-400 text-sm">Chargement des données...</p>
+        </div>
       </div>
+    );
+  }
 
-      {loading ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, idx) => (
-            <div key={idx} className="card h-28 skeleton" />
-          ))}
+  const { overview, correlations } = data;
+
+  return (
+    <div className="min-h-screen bg-neutral-950 text-white">
+      {/* Navbar */}
+      <nav className="sticky top-0 z-50 bg-neutral-950 border-b border-neutral-800">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="flex items-center justify-between h-12">
+            <span className="text-sm font-medium text-neutral-300">City Lifestyle</span>
+
+            <div className="flex items-center gap-1">
+              {TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-3 py-1.5 text-xs transition-colors ${
+                    activeTab === tab.id
+                      ? "text-white"
+                      : "text-neutral-500 hover:text-neutral-300"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`text-xs transition-colors ${
+                showFilters ? "text-white" : "text-neutral-500 hover:text-neutral-300"
+              }`}
+            >
+              Filtres {hasActiveFilters && "•"}
+            </button>
+          </div>
         </div>
-      ) : (
-        <div className="space-y-6">
-          {currentTab === "overview" && (
-            <>
-              <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <StatCard
-                  title="Villes"
-                  value={overview?.total_cities ?? "-"}
-                  hint={`${overview?.countries?.length ?? 0} pays`}
-                  tone="warm"
+      </nav>
+
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        {/* Filtres */}
+        {showFilters && (
+          <div className="mb-6 border-b border-neutral-800 pb-4">
+            <div className="flex flex-wrap items-end gap-6">
+              {/* Continents */}
+              <div>
+                <label className="block text-xs text-neutral-500 mb-2">Continent</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {data.filters?.countries?.map((continent) => {
+                    const isSelected = filters.continents.includes(continent);
+                    return (
+                      <button
+                        key={continent}
+                        onClick={() => toggleContinent(continent)}
+                        className={`px-2.5 py-1 text-xs rounded transition-colors ${
+                          isSelected
+                            ? "bg-neutral-700 text-white"
+                            : "bg-neutral-800/50 text-neutral-500 hover:text-neutral-300"
+                        }`}
+                      >
+                        {continent}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Bonheur */}
+              <div>
+                <label className="block text-xs text-neutral-500 mb-2">Bonheur</label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    placeholder="0"
+                    min="0"
+                    max="10"
+                    step="0.5"
+                    value={filters.happiness.min}
+                    onChange={(e) => setFilters({ ...filters, happiness: { ...filters.happiness, min: e.target.value } })}
+                    className="w-16 bg-transparent border border-neutral-800 rounded px-2 py-1 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-neutral-600"
+                  />
+                  <span className="text-neutral-600 text-xs">—</span>
+                  <input
+                    type="number"
+                    placeholder="10"
+                    min="0"
+                    max="10"
+                    step="0.5"
+                    value={filters.happiness.max}
+                    onChange={(e) => setFilters({ ...filters, happiness: { ...filters.happiness, max: e.target.value } })}
+                    className="w-16 bg-transparent border border-neutral-800 rounded px-2 py-1 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-neutral-600"
+                  />
+                </div>
+              </div>
+
+              {/* Revenu */}
+              <div>
+                <label className="block text-xs text-neutral-500 mb-2">Revenu (€)</label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    placeholder="0"
+                    min="0"
+                    step="500"
+                    value={filters.income.min}
+                    onChange={(e) => setFilters({ ...filters, income: { ...filters.income, min: e.target.value } })}
+                    className="w-20 bg-transparent border border-neutral-800 rounded px-2 py-1 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-neutral-600"
+                  />
+                  <span className="text-neutral-600 text-xs">—</span>
+                  <input
+                    type="number"
+                    placeholder="∞"
+                    min="0"
+                    step="500"
+                    value={filters.income.max}
+                    onChange={(e) => setFilters({ ...filters, income: { ...filters.income, max: e.target.value } })}
+                    className="w-20 bg-transparent border border-neutral-800 rounded px-2 py-1 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-neutral-600"
+                  />
+                </div>
+              </div>
+
+              {/* Résultat + Reset */}
+              <div className="flex items-center gap-4 ml-auto">
+                <span className="text-xs text-neutral-500">
+                  {filteredStats?.count || 0} villes
+                </span>
+                {hasActiveFilters && (
+                  <button
+                    onClick={resetFilters}
+                    className="text-xs text-neutral-500 hover:text-white transition-colors"
+                  >
+                    Effacer
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Contenu des onglets */}
+        {activeTab === "overview" && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <StatCard label="Villes filtrées" value={filteredStats?.count || 0} color="blue" />
+              <StatCard label="Bonheur moyen" value={filteredStats?.avgHappiness?.toFixed(1) || "-"} unit="/10" color="green" />
+              <StatCard label="Revenu moyen" value={filteredStats?.avgIncome?.toFixed(0) || "-"} unit="€" color="purple" />
+              <StatCard label="Qualité air" value={filteredStats?.avgAir?.toFixed(0) || "-"} unit="AQI" color="orange" />
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <ChartCard title="Top 10 villes par bonheur" subtitle="Score de bonheur le plus élevé">
+                <BasePlot
+                  height={320}
+                  data={[{
+                    type: "bar",
+                    orientation: "h",
+                    y: topCities.map((c) => c.city).reverse(),
+                    x: topCities.map((c) => c.happiness).reverse(),
+                    marker: { color: topCities.map((c) => CONTINENT_COLORS[c.country] || CHART_COLORS.neutral).reverse() },
+                    hovertemplate: "%{y}: %{x:.1f}/10<extra></extra>",
+                  }]}
+                  layout={{ margin: { l: 100, r: 20, t: 10, b: 30 }, xaxis: { title: "Score bonheur", range: [0, 10] } }}
                 />
-                <StatCard
-                  title="Bonheur moyen"
-                  value={(overview?.avg_happiness ?? 0).toFixed(2)}
-                  unit="/10"
-                  hint={`Plage ${overview?.happiness_range?.min ?? "-"}–${overview?.happiness_range?.max ?? "-"}`}
+              </ChartCard>
+
+              <ChartCard title="Répartition par continent" subtitle="Nombre de villes par région">
+                <BasePlot
+                  height={320}
+                  data={[{
+                    type: "bar",
+                    x: continentStats.map((c) => c.continent),
+                    y: continentStats.map((c) => c.cities),
+                    marker: { color: continentStats.map((c) => CONTINENT_COLORS[c.continent] || CHART_COLORS.neutral) },
+                    hovertemplate: "%{x}: %{y} villes<extra></extra>",
+                  }]}
+                  layout={{ xaxis: { title: "" }, yaxis: { title: "Nombre de villes" } }}
                 />
-                <StatCard
-                  title="Revenu moyen"
-                  value={`${Math.round(overview?.avg_income ?? 0).toLocaleString()} €`}
-                  hint={`Plage ${overview?.income_range?.min ?? "-"}–${overview?.income_range?.max ?? "-"}`}
+              </ChartCard>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "distributions" && (
+          <div className="grid md:grid-cols-2 gap-4">
+            <ChartCard title="Distribution du bonheur" subtitle="Répartition des scores de 0 à 10">
+              <BasePlot
+                height={320}
+                data={
+                  filters.continents.length > 0
+                    ? filters.continents.map((continent) => {
+                        const indices = filteredGeo.countries.map((c, i) => c === continent ? i : -1).filter(i => i >= 0);
+                        return {
+                          type: "histogram",
+                          name: continent,
+                          x: indices.map(i => filteredGeo.happiness_score[i]),
+                          nbinsx: 15,
+                          opacity: 0.7,
+                          marker: { color: CONTINENT_COLORS[continent] },
+                        };
+                      })
+                    : [{
+                        type: "histogram",
+                        x: filteredGeo?.happiness_score || [],
+                        nbinsx: 20,
+                        marker: { color: "#737373", opacity: 0.8 },
+                      }]
+                }
+                layout={{
+                  xaxis: { title: "Score bonheur (/10)" },
+                  yaxis: { title: "Nombre de villes" },
+                  barmode: "overlay",
+                  showlegend: filters.continents.length > 1,
+                  legend: { x: 1, xanchor: "right", y: 1, bgcolor: "transparent", font: { size: 10 } },
+                }}
+              />
+            </ChartCard>
+
+            <ChartCard title="Distribution des revenus" subtitle="Revenu mensuel moyen en euros">
+              <BasePlot
+                height={320}
+                data={
+                  filters.continents.length > 0
+                    ? filters.continents.map((continent) => {
+                        const indices = filteredGeo.countries.map((c, i) => c === continent ? i : -1).filter(i => i >= 0);
+                        return {
+                          type: "histogram",
+                          name: continent,
+                          x: indices.map(i => filteredGeo.avg_income[i]),
+                          nbinsx: 20,
+                          opacity: 0.7,
+                          marker: { color: CONTINENT_COLORS[continent] },
+                        };
+                      })
+                    : [{
+                        type: "histogram",
+                        x: filteredGeo?.avg_income || [],
+                        nbinsx: 25,
+                        marker: { color: "#737373", opacity: 0.8 },
+                      }]
+                }
+                layout={{
+                  xaxis: { title: "Revenu (€/mois)" },
+                  yaxis: { title: "Nombre de villes" },
+                  barmode: "overlay",
+                  showlegend: filters.continents.length > 1,
+                  legend: { x: 1, xanchor: "right", y: 1, bgcolor: "transparent", font: { size: 10 } },
+                }}
+              />
+            </ChartCard>
+
+            <ChartCard title="Effort logement" subtitle="Ratio loyer/revenu mensuel">
+              <BasePlot
+                height={320}
+                data={
+                  filters.continents.length > 0
+                    ? filters.continents.map((continent) => {
+                        const indices = filteredGeo.countries.map((c, i) => c === continent ? i : -1).filter(i => i >= 0);
+                        return {
+                          type: "histogram",
+                          name: continent,
+                          x: indices.map(i => rentEffort[i]),
+                          nbinsx: 20,
+                          opacity: 0.7,
+                          marker: { color: CONTINENT_COLORS[continent] },
+                        };
+                      })
+                    : [{
+                        type: "histogram",
+                        x: rentEffort,
+                        nbinsx: 25,
+                        marker: { color: "#737373", opacity: 0.8 },
+                      }]
+                }
+                layout={{
+                  xaxis: { title: "Loyer / Revenu (%)" },
+                  yaxis: { title: "Nombre de villes" },
+                  barmode: "overlay",
+                  showlegend: filters.continents.length > 1,
+                  legend: { x: 1, xanchor: "right", y: 1, bgcolor: "transparent", font: { size: 10 } },
+                }}
+              />
+            </ChartCard>
+
+            <ChartCard title="Qualité de l'air" subtitle="Index AQI (plus bas = meilleur)">
+              <BasePlot
+                height={320}
+                data={
+                  filters.continents.length > 0
+                    ? filters.continents.map((continent) => {
+                        const indices = filteredGeo.countries.map((c, i) => c === continent ? i : -1).filter(i => i >= 0);
+                        return {
+                          type: "histogram",
+                          name: continent,
+                          x: indices.map(i => filteredGeo.air_quality_index[i]),
+                          nbinsx: 15,
+                          opacity: 0.7,
+                          marker: { color: CONTINENT_COLORS[continent] },
+                        };
+                      })
+                    : [{
+                        type: "histogram",
+                        x: filteredGeo?.air_quality_index || [],
+                        nbinsx: 20,
+                        marker: { color: "#737373", opacity: 0.8 },
+                      }]
+                }
+                layout={{
+                  xaxis: { title: "Index qualité air (AQI)" },
+                  yaxis: { title: "Nombre de villes" },
+                  barmode: "overlay",
+                  showlegend: filters.continents.length > 1,
+                  legend: { x: 1, xanchor: "right", y: 1, bgcolor: "transparent", font: { size: 10 } },
+                }}
+              />
+            </ChartCard>
+          </div>
+        )}
+
+        {activeTab === "comparisons" && (
+          <div className="space-y-4">
+            <div className="grid md:grid-cols-2 gap-4">
+              <ChartCard title="Revenu vs Bonheur" subtitle="Corrélation entre richesse et bien-être">
+                <BasePlot
+                  height={350}
+                  data={[{
+                    type: "scatter",
+                    mode: "markers",
+                    x: filteredGeo?.avg_income || [],
+                    y: filteredGeo?.happiness_score || [],
+                    text: filteredGeo?.cities || [],
+                    marker: { size: 8, color: filteredGeo?.countries?.map((c) => CONTINENT_COLORS[c]) || [], opacity: 0.7 },
+                    hovertemplate: "%{text}<br>Revenu: %{x}€<br>Bonheur: %{y:.1f}/10<extra></extra>",
+                  }]}
+                  layout={{ xaxis: { title: "Revenu (€/mois)" }, yaxis: { title: "Bonheur (/10)", range: [0, 10] } }}
                 />
-                <StatCard
-                  title="Qualité de l'air"
-                  value={(overview?.avg_air_quality ?? 0).toFixed(1)}
-                  hint="Index moyen (AQI)"
+              </ChartCard>
+
+              <ChartCard title="Qualité de l'air vs Bonheur" subtitle="Impact environnemental sur le bien-être">
+                <BasePlot
+                  height={350}
+                  data={[{
+                    type: "scatter",
+                    mode: "markers",
+                    x: filteredGeo?.air_quality_index || [],
+                    y: filteredGeo?.happiness_score || [],
+                    text: filteredGeo?.cities || [],
+                    marker: { size: 8, color: filteredGeo?.countries?.map((c) => CONTINENT_COLORS[c]) || [], opacity: 0.7 },
+                    hovertemplate: "%{text}<br>AQI: %{x}<br>Bonheur: %{y:.1f}/10<extra></extra>",
+                  }]}
+                  layout={{ xaxis: { title: "Index qualité air (AQI - bas = mieux)" }, yaxis: { title: "Bonheur (/10)", range: [0, 10] } }}
                 />
-              </section>
+              </ChartCard>
+            </div>
 
-              <section className="space-y-4">
-                <PlotCard
-                  title="Top villes par métrique"
-                  description="Graphique dynamique sur la métrique sélectionnée"
-                  height={440}
-                >
-                  {{
-                    controls: (
-                      <div className="flex items-center gap-2">
-                        <select
-                          className="bg-smoke border border-white/10 rounded-lg px-3 py-2 text-sm text-accent"
-                          value={metric}
-                          onChange={(e) => setMetric(e.target.value)}
-                        >
-                          {metrics.map((m) => (
-                            <option key={m.key} value={m.key}>
-                              {m.label}
-                            </option>
-                          ))}
-                        </select>
-                        <input
-                          type="number"
-                          min={3}
-                          max={15}
-                          value={topN}
-                          onChange={(e) => setTopN(Number(e.target.value))}
-                          className="bg-smoke border border-white/10 rounded-lg px-3 py-2 w-20 text-sm text-accent"
-                        />
-                      </div>
-                    ),
-                    plot: (
-                      <StyledPlot
-                        style={{ height: 440 }}
-                        data={[
-                          {
-                            type: "bar",
-                            orientation: "h",
-                            x: topData?.x ?? [],
-                            y: topData?.y ?? [],
-                            marker: {
-                              color: "#f5f5f5",
-                              line: { color: "#1f1f22", width: 1 },
-                            },
-                          },
-                        ]}
-                        layout={{
-                          height: 440,
-                          margin: { l: 160, r: 60, t: 40, b: 60 },
-                          xaxis: { title: metrics.find((m) => m.key === metric)?.label ?? "Valeur" },
-                          yaxis: { automargin: true },
-                        }}
-                      />
-                    ),
-                  }}
-                </PlotCard>
+            <div className="grid md:grid-cols-2 gap-4">
+              <ChartCard title="Revenus par continent" subtitle="Distribution des revenus mensuels">
+                <BasePlot
+                  height={320}
+                  data={[...new Set(filteredGeo?.countries || [])].map((continent) => {
+                    const indices = filteredGeo.countries.map((c, i) => (c === continent ? i : -1)).filter((i) => i >= 0);
+                    return { type: "box", name: continent, y: indices.map((i) => filteredGeo.avg_income[i]), marker: { color: CONTINENT_COLORS[continent] }, boxpoints: false };
+                  })}
+                  layout={{ showlegend: false, yaxis: { title: "Revenu (€/mois)" } }}
+                />
+              </ChartCard>
 
-                <PlotCard
-                  title="Distribution des revenus"
-                  description="Histogramme des revenus moyens par ville"
-                  height={420}
-                >
-                  {{
-                    plot: (
-                      <StyledPlot
-                        style={{ height: 420 }}
-                        data={[
-                          {
-                            type: "histogram",
-                            x: histogramData?.incomes ?? [],
-                            marker: { color: "#f5f5f5", line: { color: "#111113", width: 1 } },
-                            nbinsx: 30,
-                            opacity: 0.9,
-                          },
-                        ]}
-                        layout={{
-                          height: 420,
-                          bargap: 0.06,
-                          xaxis: { title: "Revenu moyen (€)" },
-                          yaxis: { title: "Nombre de villes" },
-                        }}
-                      />
-                    ),
-                  }}
-                </PlotCard>
+              <ChartCard title="Bonheur par continent" subtitle="Distribution des scores de bonheur">
+                <BasePlot
+                  height={320}
+                  data={[...new Set(filteredGeo?.countries || [])].map((continent) => {
+                    const indices = filteredGeo.countries.map((c, i) => (c === continent ? i : -1)).filter((i) => i >= 0);
+                    return { type: "box", name: continent, y: indices.map((i) => filteredGeo.happiness_score[i]), marker: { color: CONTINENT_COLORS[continent] }, boxpoints: false };
+                  })}
+                  layout={{ showlegend: false, yaxis: { title: "Bonheur (/10)", range: [0, 10] } }}
+                />
+              </ChartCard>
+            </div>
+          </div>
+        )}
 
-                <PlotCard
-                  title="Distribution du bonheur"
-                  description="Histogramme du score de bonheur par ville"
-                  height={420}
-                >
-                  {{
-                    plot: (
-                      <StyledPlot
-                        style={{ height: 420 }}
-                        data={[
-                          {
-                            type: "histogram",
-                            x: histogramData?.happiness ?? [],
-                            marker: { color: "#d1d5db", line: { color: "#111113", width: 1 } },
-                            nbinsx: 28,
-                            opacity: 0.9,
-                          },
-                        ]}
-                        layout={{
-                          height: 420,
-                          bargap: 0.08,
-                          xaxis: { title: "Score de bonheur (/10)" },
-                          yaxis: { title: "Nombre de villes" },
-                        }}
-                      />
-                    ),
-                  }}
-                </PlotCard>
-              </section>
-            </>
-          )}
+        {activeTab === "correlations" && (
+          <ChartCard title="Matrice de corrélation" subtitle="Coefficient de Pearson entre les variables (-1 à +1)">
+            <BasePlot
+              height={500}
+              data={[{
+                type: "heatmap",
+                z: correlations?.correlation_matrix || [],
+                x: correlations?.columns?.map((c) => c.replace(/_/g, " ")) || [],
+                y: correlations?.columns?.map((c) => c.replace(/_/g, " ")) || [],
+                colorscale: [[0, "#ef4444"], [0.5, "#262626"], [1, "#3b82f6"]],
+                zmin: -1,
+                zmax: 1,
+                hovertemplate: "%{x}<br>×<br>%{y}<br><b>r = %{z:.2f}</b><extra></extra>",
+                showscale: true,
+                colorbar: { title: "r", thickness: 15 },
+              }]}
+              layout={{ margin: { l: 140, r: 40, t: 20, b: 120 }, xaxis: { tickangle: -45, side: "bottom" } }}
+            />
+          </ChartCard>
+        )}
 
-          {currentTab === "comparisons" && (
-            <section className="space-y-4">
-              <PlotCard
-                title="Bonheur vs revenu"
-                description="Dispersion des villes, colorée par qualité des transports"
-                height={520}
-              >
-                {{
-                  plot: (
-                    <StyledPlot
-                      style={{ height: 520 }}
-                      data={[
-                        {
-                          type: "scattergl",
-                          mode: "markers",
-                          x: scatterData?.x ?? [],
-                          y: scatterData?.y ?? [],
-                          text: scatterData?.text ?? [],
-                          marker: {
-                            size: 9,
-                            opacity: 0.82,
-                            color: scatterData?.transport ?? [],
-                            colorscale: "Greys",
-                            showscale: true,
-                            colorbar: { title: "Transports" },
-                            line: { color: "#0a0a0b", width: 0.5 },
-                          },
-                          hoverinfo: "text+x+y",
-                        },
-                      ]}
-                      layout={{
-                        height: 520,
-                        xaxis: { title: "Revenu moyen (€)" },
-                        yaxis: { title: "Bonheur (/10)" },
-                        margin: { l: 90, r: 60, t: 40, b: 80 },
-                      }}
-                    />
-                  ),
+        {activeTab === "geography" && (
+          <div className="space-y-4">
+            <ChartCard
+              title="Carte mondiale"
+              subtitle="Coordonnées approximatives (données synthétiques pour démonstration)"
+            >
+              <Plot
+                data={[{
+                  type: "scattergeo",
+                  mode: "markers",
+                  lon: filteredGeo?.longitude || [],
+                  lat: filteredGeo?.latitude || [],
+                  text: filteredGeo?.cities?.map((c, i) =>
+                    `${c}<br>${filteredGeo.countries[i]}<br>Bonheur: ${filteredGeo.happiness_score[i]?.toFixed(1)}/10<br>Revenu: ${filteredGeo.avg_income[i]}€`
+                  ) || [],
+                  marker: {
+                    size: 10,
+                    color: filteredGeo?.happiness_score || [],
+                    colorscale: [[0, "#ef4444"], [0.5, "#f59e0b"], [1, "#10b981"]],
+                    cmin: 2,
+                    cmax: 9,
+                    colorbar: { title: "Bonheur", thickness: 15, len: 0.6 },
+                    line: { color: "#171717", width: 1 },
+                  },
+                  hoverinfo: "text",
+                }]}
+                layout={{
+                  height: 500,
+                  paper_bgcolor: "transparent",
+                  margin: { l: 0, r: 0, t: 10, b: 10 },
+                  geo: {
+                    projection: { type: "natural earth" },
+                    bgcolor: "transparent",
+                    showland: true,
+                    landcolor: "#262626",
+                    showocean: true,
+                    oceancolor: "#171717",
+                    showcoastlines: true,
+                    coastlinecolor: "#404040",
+                    showcountries: true,
+                    countrycolor: "#404040",
+                    showframe: false,
+                  },
                 }}
-              </PlotCard>
+                config={{ displayModeBar: false, responsive: true }}
+                style={{ width: "100%", height: 500 }}
+                useResizeHandler
+              />
+            </ChartCard>
 
-              <PlotCard
-                title="Corrélations"
-                description="Matrice de corrélation des variables numériques"
-                height={640}
-              >
-                {{
-                  plot: (
-                    <StyledPlot
-                      style={{ height: 640 }}
-                      data={[
-                        {
-                          type: "heatmap",
-                          z: heatmapData?.z ?? [],
-                          x: heatmapData?.x ?? [],
-                          y: heatmapData?.y ?? [],
-                          colorscale: "Greys",
-                          reversescale: true,
-                          showscale: true,
-                        },
-                      ]}
-                      layout={{
-                        height: 640,
-                        margin: { l: 100, r: 80, t: 40, b: 100 },
-                      }}
-                    />
-                  ),
-                }}
-              </PlotCard>
-            </section>
-          )}
+            <div className="grid md:grid-cols-2 gap-4">
+              <ChartCard title="Répartition géographique" subtitle="Nombre de villes par continent">
+                <BasePlot
+                  height={300}
+                  data={[{
+                    type: "pie",
+                    labels: continentStats.map((c) => c.continent),
+                    values: continentStats.map((c) => c.cities),
+                    marker: { colors: continentStats.map((c) => CONTINENT_COLORS[c.continent]) },
+                    textinfo: "label+percent",
+                    hovertemplate: "%{label}: %{value} villes<extra></extra>",
+                  }]}
+                  layout={{ showlegend: false, margin: { l: 20, r: 20, t: 20, b: 20 } }}
+                />
+              </ChartCard>
 
-          {currentTab === "geography" && (
-            <section className="space-y-4">
-              <PlotCard
-                title="Carte des villes"
-                description="Dispersion des villes sur le globe, colorée par score de bonheur"
-                height={640}
-              >
-                {{
-                  plot: (
-                    <StyledPlot
-                      style={{ height: 640 }}
-                      data={[
-                        {
-                          type: "scattergeo",
-                          mode: "markers",
-                          lon: mapData?.lon ?? [],
-                          lat: mapData?.lat ?? [],
-                          text: mapData?.text ?? [],
-                          marker: {
-                            size: 7,
-                            color: mapData?.happiness ?? [],
-                            colorscale: "Greys",
-                            showscale: true,
-                            colorbar: { title: "Bonheur" },
-                            line: { color: "#0a0a0b", width: 0.6 },
-                          },
-                          hoverinfo: "text",
-                        },
-                      ]}
-                      layout={{
-                        height: 640,
-                        geo: {
-                          projection: { type: "natural earth" },
-                          bgcolor: "#0a0a0b",
-                          showframe: false,
-                          showcountries: true,
-                          countrycolor: "#2c2c30",
-                          landcolor: "#111113",
-                          oceancolor: "#0a0a0b",
-                        },
-                        margin: { l: 0, r: 0, t: 20, b: 20 },
-                      }}
-                    />
-                  ),
-                }}
-              </PlotCard>
-
-              <PlotCard
-                title="Villes par pays"
-                description="Volume de villes par pays, coloré par bonheur moyen"
-                height={520}
-              >
-                {{
-                  plot: (
-                    <StyledPlot
-                      style={{ height: 520 }}
-                      data={[
-                        {
-                          type: "bar",
-                          x: countryBreakdown?.countries ?? [],
-                          y: countryBreakdown?.cityCount ?? [],
-                          marker: {
-                            color: countryBreakdown?.happiness ?? [],
-                            colorscale: "Greys",
-                            showscale: true,
-                            colorbar: { title: "Bonheur moyen" },
-                            line: { color: "#1f1f22", width: 1 },
-                          },
-                        },
-                      ]}
-                      layout={{
-                        height: 520,
-                        margin: { l: 80, r: 60, t: 50, b: 120 },
-                        xaxis: { title: "Pays" },
-                        yaxis: { title: "Nombre de villes" },
-                      }}
-                    />
-                  ),
-                }}
-              </PlotCard>
-            </section>
-          )}
-        </div>
-      )}
-    </main>
+              <ChartCard title="Bonheur par région" subtitle="Score moyen par continent">
+                <BasePlot
+                  height={300}
+                  data={[{
+                    type: "bar",
+                    x: continentStats.map((c) => c.continent),
+                    y: continentStats.map((c) => c.avgHappiness),
+                    marker: { color: continentStats.map((c) => CONTINENT_COLORS[c.continent]) },
+                    hovertemplate: "%{x}: %{y:.1f}/10<extra></extra>",
+                  }]}
+                  layout={{ yaxis: { title: "Bonheur moyen (/10)", range: [0, 10] } }}
+                />
+              </ChartCard>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
